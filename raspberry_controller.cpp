@@ -86,7 +86,7 @@ public:
 
 int main() {
     try {
-        RobotController controller("/dev/ttyACM0"); // Порт может отличаться, при необходимости измените
+        RobotController controller("/dev/ttyUSB0"); // Порт может отличаться, при необходимости измените
         controller.printControls();
 
         fd_set read_fds;
