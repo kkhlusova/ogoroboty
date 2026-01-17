@@ -1,94 +1,104 @@
-#include <Arduino.h>
+// motor_control.ino
 
-// Определение пинов для двигателей
-const int LEFT_MOTOR_FORWARD = 6;   // Левый двигатель движение
-const int LEFT_MOTOR_STOP = 7;      // Левый двигатель стоп
-const int RIGHT_MOTOR_FORWARD = 5;  // Правый двигатель движение
-const int RIGHT_MOTOR_STOP = 4;     // Правый двигатель стоп
+// Пины для левого мотора
+const int LEFT_MOVE = 6;
+const int LEFT_PWR = 7;
+
+// Пины для правого мотора
+const int RIGHT_MOVE = 5;
+const int RIGHT_PWR = 4;
 
 void setup() {
-  // Инициализация пинов как выходов
-  pinMode(LEFT_MOTOR_FORWARD, OUTPUT);
-  pinMode(LEFT_MOTOR_STOP, OUTPUT);
-  pinMode(RIGHT_MOTOR_FORWARD, OUTPUT);
-  pinMode(RIGHT_MOTOR_STOP, OUTPUT);
-  
-  // Инициализация последовательного соединения
+  // Настраиваем пины как выходы
+  pinMode(LEFT_MOVE, OUTPUT);
+  pinMode(LEFT_PWR, OUTPUT);
+  pinMode(RIGHT_MOVE, OUTPUT);
+  pinMode(RIGHT_PWR, OUTPUT);
+
+  // Инициализируем Serial (UART) на скорости 9600 бод
   Serial.begin(9600);
-  
-  // Устанавливаем начальное состояние двигателей (остановлены)
-  stopRobot();
+
+  // Останавливаем моторы при старте
+  Stop();
 }
 
 void loop() {
   if (Serial.available() > 0) {
     char command = Serial.read();
-    
-    switch(command) {
-      case 'W':
-      case 'w':
+
+    switch (command) {
+      case 'W': // Вперёд
         moveForward();
         break;
-      case 'S':
-      case 's':
+      case 'S': // Назад
         moveBackward();
         break;
-      case 'A':
-      case 'a':
-        turnLeft();
+      case 'A': // Влево (поворот на месте)
+        moveLeft();
         break;
-      case 'D':
-      case 'd':
-        turnRight();
+      case 'D': // Вправо (поворот на месте)
+        moveRight();
         break;
       case 'X':
-      case 'x':
-        stopRobot();
-        break;
-      default:
-        // Неизвестная команда - останавливаем робота
-        stopRobot();
+        Stop();
         break;
     }
   }
+  
 }
 
-// Функция движения вперед
+// ВПРЕД
 void moveForward() {
-  digitalWrite(LEFT_MOTOR_FORWARD, HIGH);
-  digitalWrite(LEFT_MOTOR_STOP, LOW);
-  digitalWrite(RIGHT_MOTOR_FORWARD, HIGH);
-  digitalWrite(RIGHT_MOTOR_STOP, LOW);
+  digitalWrite(LEFT_MOVE, HIGH);
+  digitalWrite(RIGHT_MOVE, HIGH);
+  analogWrite(LEFT_PWR, 200);
+  analogWrite(RIGHT_PWR, 200);
 }
 
-// Функция движения назад
+//НАЗАД
 void moveBackward() {
-  digitalWrite(LEFT_MOTOR_FORWARD, LOW);
-  digitalWrite(LEFT_MOTOR_STOP, HIGH);
-  digitalWrite(RIGHT_MOTOR_FORWARD, LOW);
-  digitalWrite(RIGHT_MOTOR_STOP, HIGH);
+  digitalWrite(LEFT_MOVE, HIGH);
+  digitalWrite(RIGHT_MOVE, HIGH);
+  analogWrite(LEFT_PWR, -200);
+  analogWrite(RIGHT_PWR, -200);
 }
 
-// Функция поворота влево
-void turnLeft() {
-  digitalWrite(LEFT_MOTOR_FORWARD, LOW);
-  digitalWrite(LEFT_MOTOR_STOP, HIGH);
-  digitalWrite(RIGHT_MOTOR_FORWARD, HIGH);
-  digitalWrite(RIGHT_MOTOR_STOP, LOW);
+// НАЛЕВО ПОВОРОТ
+void moveLeft() {
+  digitalWrite(LEFT_MOVE, LOW);
+  digitalWrite(RIGHT_MOVE, HIGH);
+  analogWrite(LEFT_PWR, 0);
+  analogWrite(RIGHT_PWR, 200);
 }
 
-// Функция поворота вправо
-void turnRight() {
-  digitalWrite(LEFT_MOTOR_FORWARD, HIGH);
-  digitalWrite(LEFT_MOTOR_STOP, LOW);
-  digitalWrite(RIGHT_MOTOR_FORWARD, LOW);
-  digitalWrite(RIGHT_MOTOR_STOP, HIGH);
+// ВПРАВО
+void moveRight() {
+  digitalWrite(LEFT_MOVE, HIGH);
+  digitalWrite(RIGHT_MOVE, LOW);
+  analogWrite(LEFT_PWR, 200);
+  analogWrite(RIGHT_PWR, 0);
 }
 
-// Функция остановки
-void stopRobot() {
-  digitalWrite(LEFT_MOTOR_FORWARD, LOW);
-  digitalWrite(LEFT_MOTOR_STOP, LOW);
-  digitalWrite(RIGHT_MOTOR_FORWARD, LOW);
-  digitalWrite(RIGHT_MOTOR_STOP, LOW);
+// Левые вперед
+void moveLeftBack() {
+  digitalWrite(LEFT_MOVE, LOW);
+  digitalWrite(RIGHT_MOVE, HIGH);
+  analogWrite(LEFT_PWR, 0);
+  analogWrite(RIGHT_PWR, -200);
+}
+
+// Правые вперед
+void moveRightBack() {
+  digitalWrite(LEFT_MOVE, HIGH);
+  digitalWrite(RIGHT_MOVE, LOW);
+  analogWrite(LEFT_PWR, -200);
+  analogWrite(RIGHT_PWR, 0);
+}
+
+// СТОП
+void Stop() {
+  digitalWrite(LEFT_MOVE, LOW);
+  digitalWrite(RIGHT_MOVE, LOW);
+  analogWrite(LEFT_PWR, 0);
+  analogWrite(RIGHT_PWR, 0);
 }
