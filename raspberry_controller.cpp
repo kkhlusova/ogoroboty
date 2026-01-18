@@ -28,8 +28,8 @@ public:
             throw std::runtime_error("UART configuration failed");
         }
 
-        cfsetospeed(&tty, B9600);
-        cfsetispeed(&tty, B9600);
+        cfsetospeed(&tty, B115200);
+        cfsetispeed(&tty, B115200);
 
         tty.c_cflag &= ~PARENB; // No parity
         tty.c_cflag &= ~CSTOPB; // 1 Stop bit
