@@ -4,7 +4,7 @@ CXX = g++
 CXXFLAGS = -std=c++11 -Wall -Wextra -O2
 TARGET = robot_controller
 SRC = raspberry_controller.cpp
-ARDUINO_FILE = omegabot_control.cpp
+ARDUINO_FILE = robot_controller.cpp
 
 all: $(TARGET)
 
