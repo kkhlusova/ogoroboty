@@ -29,6 +29,11 @@ private:
     }
 
 public:
+
+    int getUartFD() const {
+        return uart_fd;
+    }
+
     RobotController(const std::string& port = "/dev/ttyUSB0") : uart_port(port) {
         // Открытие UART порта (существующий код)
         uart_fd = open(uart_port.c_str(), O_RDWR | O_NOCTTY);
