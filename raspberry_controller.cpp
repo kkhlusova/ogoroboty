@@ -9,8 +9,6 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
-#include <chrono>
-#include <algorithm>
 
 class RobotController {
 private:
@@ -31,11 +29,11 @@ private:
     }
 
 public:
-
+    // Добавьте этот метод для получения дескриптора UART
     int getUartFD() const {
         return uart_fd;
     }
-
+    
     RobotController(const std::string& port = "/dev/ttyUSB0") : uart_port(port) {
         // Открытие UART порта (существующий код)
         uart_fd = open(uart_port.c_str(), O_RDWR | O_NOCTTY);
@@ -168,29 +166,71 @@ public:
     }
 };
 
-
-int main(int argc, char* argv[])
-{
-    if (argc != 2) {
-        std::cerr << "Usage: robot_controller <W|A|S|D|X>" << std::endl;
-        return 1;
-    }
-
-    char cmd = argv[1][0];
-
+int main() {
     try {
         RobotController controller("/dev/ttyUSB0");
-
-        if (!controller.sendCommand(cmd)) {
-            return 1;
+        controller.printControls();
+        
+        fd_set read_fds;
+        struct timeval timeout;
+        
+        std::cout << "Robot controller started. Press Q to quit." << std::endl;
+        
+        while (true) {
+            FD_ZERO(&read_fds);
+            FD_SET(STDIN_FILENO, &read_fds);
+            FD_SET(controller.getUartFD(), &read_fds); // Нужно добавить метод getUartFD()
+            
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 100000; // 100ms
+            
+            int activity = select(FD_SETSIZE, &read_fds, NULL, NULL, &timeout);
+            
+            if (activity < 0) {
+                perror("select error");
+                break;
+            }
+            
+            // Проверяем данные от Arduino
+            if (FD_ISSET(controller.getUartFD(), &read_fds)) {
+                controller.checkAndLogArduinoData();
+            }
+            
+            // Обработка команд с клавиатуры
+            if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+                char input_char;
+                if (read(STDIN_FILENO, &input_char, 1) > 0) {
+                    char cmd = 0;
+                    
+                    switch(input_char) {
+                        case 'w': case 'W': cmd = 'W'; break;
+                        case 's': case 'S': cmd = 'S'; break;
+                        case 'a': case 'A': cmd = 'A'; break;
+                        case 'd': case 'D': cmd = 'D'; break;
+                        case 'x': case 'X': cmd = 'X'; break;
+                        case 'q': case 'Q': 
+                            cmd = 'X';
+                            controller.sendCommand(cmd);
+                            usleep(100000); // Даем время на остановку
+                            std::cout << "\nStopping robot and exiting..." << std::endl;
+                            return 0;
+                        default: continue;
+                    }
+                    
+                    if (cmd != 0) {
+                        if (!controller.sendCommand(cmd)) {
+                            std::cerr << "Failed to send command to robot" << std::endl;
+                            break;
+                        }
+                        std::cout << "Sent command: " << cmd << std::endl;
+                    }
+                }
+            }
         }
-
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
-
+    
     return 0;
 }
-
-
