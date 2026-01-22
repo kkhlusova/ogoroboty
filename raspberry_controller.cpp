@@ -1,4 +1,3 @@
-[file content begin]
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -100,23 +99,34 @@ private:
     
     // Проверка связи
     void checkConnectionTimeout() {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now - last_command_time);
-            
-        if (elapsed > CONNECTION_TIMEOUT && !connection_lost) {
-            connection_lost = true;
-            log_file << "[" << getCurrentTime() << "] CONNECTION: Timeout detected!" << std::endl;
-            log_file.flush();
-            
-            // Запускаем безопасную остановку
-            performSafetyStop();
-        }
+    // Добавьте проверку, что прошло достаточно времени с момента инициализации
+    static auto program_start = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    
+    // Не проверяем таймаут в первые 2 секунды работы программы
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - program_start) < std::chrono::seconds(2)) {
+        return;
     }
+    
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - last_command_time);
+        
+    if (elapsed > CONNECTION_TIMEOUT && !connection_lost) {
+        connection_lost = true;
+        log_file << "[" << getCurrentTime() << "] CONNECTION: Timeout detected!" << std::endl;
+        log_file.flush();
+        
+        // Запускаем безопасную остановку
+        performSafetyStop();
+    }
+}
     
     // Обновление времени последней команды
     void updateConnectionTime() {
+        std::lock_guard<std::mutex> lock(connection_mutex);
         last_command_time = std::chrono::steady_clock::now();
+    
+        // Логируем восстановление только если связь была потеряна
         if (connection_lost) {
             connection_lost = false;
             log_file << "[" << getCurrentTime() << "] CONNECTION: Restored." << std::endl;
@@ -186,6 +196,7 @@ public:
         
         // Инициализация таймера связи
         last_command_time = std::chrono::steady_clock::now();
+        updateConnectionTime();
         last_robot_state = 'X'; // Начинаем с остановленного состояния
         
         log_file << "=== Robot Log Started at " << getCurrentTime() << " ===" << std::endl;
@@ -203,6 +214,13 @@ public:
     }
     
     bool sendCommand(char cmd) {
+
+        // Если связь потеряна, сначала восстанавливаем ее статус
+        if (connection_lost) {
+            connection_lost = false;
+            log_file << "[" << getCurrentTime() << "] CONNECTION: Restored via command." << std::endl;
+        }
+    
         // Обновляем время последней команды
         updateConnectionTime();
         
