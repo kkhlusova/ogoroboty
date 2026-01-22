@@ -11,12 +11,25 @@
 #include <sstream>
 #include <chrono>
 #include <algorithm>
+#include <atomic>
+#include <thread>
+#include <mutex>
 
 class RobotController {
 private:
     int uart_fd;
     std::string uart_port;
     std::ofstream log_file;
+
+    // Переменные для отслеживания состояния связи и робота
+    std::atomic<bool> connection_lost{false};
+    std::atomic<bool> safety_stop_active{false};
+    std::atomic<char> last_robot_state{0}; // 'W'=вперед, 'S'=назад, 'A'=влево, 'D'=вправо, 'X'=стоп
+    std::mutex connection_mutex;
+    
+    // Таймер для отслеживания потери связи
+    std::chrono::steady_clock::time_point last_command_time;
+    const std::chrono::milliseconds CONNECTION_TIMEOUT{500}; // 500ms таймаут
     
     std::string getCurrentTime() {
         auto now = std::chrono::system_clock::now();
@@ -30,18 +43,98 @@ private:
         return ss.str();
     }
 
+
+// Функция безопасной остановки при потере связи
+    void performSafetyStop() {
+        std::lock_guard<std::mutex> lock(connection_mutex);
+        
+        if (safety_stop_active) return; // Уже выполняется
+        
+        safety_stop_active = true;
+        char last_state = last_robot_state.load();
+        
+        log_file << "[" << getCurrentTime() << "] SAFETY: Connection lost! Last state: " 
+                 << last_state << ", performing safety stop..." << std::endl;
+        log_file.flush();
+        std::cout << "\n!!! SAFETY: Connection lost! Performing safety stop..." << std::endl;
+        
+        switch(last_state) {
+            case 'W': // Ехал вперед -> нужно проехать назад
+                sendEmergencyCommand('S', 300); // Едем назад 300ms
+                usleep(350000); // Ждем завершения маневра
+                sendEmergencyCommand('X', 100); // Полная остановка
+                break;
+                
+            case 'S': // Ехал назад -> нужно проехать вперед
+                sendEmergencyCommand('W', 300); // Едем вперед 300ms
+                usleep(350000); // Ждем завершения маневра
+                sendEmergencyCommand('X', 100); // Полная остановка
+                break;
+                
+            case 'A': // Поворачивал влево
+            case 'D': // Поворачивал вправо
+                sendEmergencyCommand('X', 100); // Просто останавливаемся
+                break;
+                
+            case 'X': // Уже был остановлен
+            default:
+                sendEmergencyCommand('X', 100); // Останавливаем на всякий случай
+                break;
+        }
+        
+        log_file << "[" << getCurrentTime() << "] SAFETY: Safety stop completed." << std::endl;
+        log_file.flush();
+        std::cout << "SAFETY: Safety stop completed." << std::endl;
+        
+        safety_stop_active = false;
+    }
+    
+    // Отправка аварийной команды (без проверки связи)
+    void sendEmergencyCommand(char cmd, int duration_ms) {
+        ssize_t bytes_written = write(uart_fd, &cmd, 1);
+        if (bytes_written > 0) {
+            tcdrain(uart_fd); // Ждем отправки всех данных
+            usleep(duration_ms * 1000); // Ждем указанное время
+        }
+    }
+    
+    // Проверка связи
+    void checkConnectionTimeout() {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_command_time);
+            
+        if (elapsed > CONNECTION_TIMEOUT && !connection_lost) {
+            connection_lost = true;
+            log_file << "[" << getCurrentTime() << "] CONNECTION: Timeout detected!" << std::endl;
+            log_file.flush();
+            
+            // Запускаем безопасную остановку
+            performSafetyStop();
+        }
+    }
+    
+
+
+    void updateConnectionTime() {
+        last_command_time = std::chrono::steady_clock::now();
+        if (connection_lost) {
+            connection_lost = false;
+            log_file << "[" << getCurrentTime() << "] CONNECTION: Restored." << std::endl;
+            log_file.flush();
+        }
+    }
+
 public:    
     int getUartFD() const { return uart_fd; };
 
     RobotController(const std::string& port = "/dev/ttyUSB0") : uart_port(port) {
-        // Открытие UART порта (существующий код)
         uart_fd = open(uart_port.c_str(), O_RDWR | O_NOCTTY);
         if (uart_fd < 0) {
             std::cerr << "Error opening UART port " << uart_port << std::endl;
             throw std::runtime_error("UART connection failed");
         }
         
-        // Настройка UART (существующий код)
         struct termios tty;
         memset(&tty, 0, sizeof(tty));
         
@@ -152,7 +245,6 @@ public:
     }
     
     void printControls() {
-        // Существующий код...
         std::cout << "\n=== OmegaBot Controller ===" << std::endl;
         std::cout << "Controls:" << std::endl;
         std::cout << "W - Move Forward" << std::endl;
@@ -181,7 +273,7 @@ int main() {
         while (true) {
             FD_ZERO(&read_fds);
             FD_SET(STDIN_FILENO, &read_fds);
-            FD_SET(controller.getUartFD(), &read_fds); // Нужно добавить метод getUartFD()
+            FD_SET(controller.getUartFD(), &read_fds); 
             
             timeout.tv_sec = 0;
             timeout.tv_usec = 100000; // 100ms
