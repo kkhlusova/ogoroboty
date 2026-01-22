@@ -1,3 +1,4 @@
+[file content begin]
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -20,7 +21,7 @@ private:
     int uart_fd;
     std::string uart_port;
     std::ofstream log_file;
-
+    
     // Переменные для отслеживания состояния связи и робота
     std::atomic<bool> connection_lost{false};
     std::atomic<bool> safety_stop_active{false};
@@ -43,8 +44,7 @@ private:
         return ss.str();
     }
 
-
-// Функция безопасной остановки при потере связи
+    // Функция безопасной остановки при потере связи
     void performSafetyStop() {
         std::lock_guard<std::mutex> lock(connection_mutex);
         
@@ -114,8 +114,7 @@ private:
         }
     }
     
-
-
+    // Обновление времени последней команды
     void updateConnectionTime() {
         last_command_time = std::chrono::steady_clock::now();
         if (connection_lost) {
@@ -129,12 +128,14 @@ public:
     int getUartFD() const { return uart_fd; };
 
     RobotController(const std::string& port = "/dev/ttyUSB0") : uart_port(port) {
+        // Открытие UART порта (существующий код)
         uart_fd = open(uart_port.c_str(), O_RDWR | O_NOCTTY);
         if (uart_fd < 0) {
             std::cerr << "Error opening UART port " << uart_port << std::endl;
             throw std::runtime_error("UART connection failed");
         }
         
+        // Настройка UART (существующий код)
         struct termios tty;
         memset(&tty, 0, sizeof(tty));
         
@@ -144,7 +145,7 @@ public:
             throw std::runtime_error("UART configuration failed");
         }
         
-        cfsetospeed(&tty, B9600);  // Измените на 9600 если Arduino использует эту скорость
+        cfsetospeed(&tty, B9600);
         cfsetispeed(&tty, B9600);
         
         tty.c_cflag &= ~PARENB;
@@ -183,6 +184,10 @@ public:
             throw std::runtime_error("Log file creation failed");
         }
         
+        // Инициализация таймера связи
+        last_command_time = std::chrono::steady_clock::now();
+        last_robot_state = 'X'; // Начинаем с остановленного состояния
+        
         log_file << "=== Robot Log Started at " << getCurrentTime() << " ===" << std::endl;
         std::cout << "Logging to file: " << log_filename << std::endl;
     }
@@ -198,6 +203,14 @@ public:
     }
     
     bool sendCommand(char cmd) {
+        // Обновляем время последней команды
+        updateConnectionTime();
+        
+        // Сохраняем текущее состояние
+        if (cmd != 'X' && cmd != ' ') {
+            last_robot_state = cmd;
+        }
+        
         ssize_t bytes_written = write(uart_fd, &cmd, 1);
         if (bytes_written < 0) {
             std::cerr << "Error writing to UART" << std::endl;
@@ -226,6 +239,9 @@ public:
         ssize_t bytes_read = read(uart_fd, buffer, sizeof(buffer) - 1);
         
         if (bytes_read > 0) {
+            // Обновляем время связи при получении данных от Arduino
+            updateConnectionTime();
+            
             buffer[bytes_read] = '\0';
             
             // Записываем в лог файл
@@ -255,6 +271,11 @@ public:
         std::cout << "Q - Quit" << std::endl;
         std::cout << "=========================\n" << std::endl;
     }
+    
+    // Метод для проверки таймаута (должен вызываться в основном цикле)
+    void checkForConnectionIssues() {
+        checkConnectionTimeout();
+    }
 };
 
 int main() {
@@ -273,7 +294,7 @@ int main() {
         while (true) {
             FD_ZERO(&read_fds);
             FD_SET(STDIN_FILENO, &read_fds);
-            FD_SET(controller.getUartFD(), &read_fds); 
+            FD_SET(controller.getUartFD(), &read_fds);
             
             timeout.tv_sec = 0;
             timeout.tv_usec = 100000; // 100ms
@@ -290,6 +311,9 @@ int main() {
             if (FD_ISSET(controller.getUartFD(), &read_fds)) {
                 controller.checkAndLogArduinoData();
             }
+            
+            // Проверяем таймаут связи
+            controller.checkForConnectionIssues();
             
             // Обработка команд с клавиатуры
             if (FD_ISSET(STDIN_FILENO, &read_fds)) {
@@ -327,3 +351,4 @@ int main() {
     
     return 0;
 }
+[file content end]
