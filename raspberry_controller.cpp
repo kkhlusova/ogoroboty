@@ -30,12 +30,9 @@ private:
         return ss.str();
     }
 
-public:
-    // Добавьте этот метод для получения дескриптора UART
-    int getUartFD() const {
-        return uart_fd;
-    }
-    
+public:    
+    int getUartFD() const { return uart_fd; };
+
     RobotController(const std::string& port = "/dev/ttyUSB0") : uart_port(port) {
         // Открытие UART порта (существующий код)
         uart_fd = open(uart_port.c_str(), O_RDWR | O_NOCTTY);
@@ -54,7 +51,7 @@ public:
             throw std::runtime_error("UART configuration failed");
         }
         
-        cfsetospeed(&tty, B9600); 
+        cfsetospeed(&tty, B9600);  // Измените на 9600 если Arduino использует эту скорость
         cfsetispeed(&tty, B9600);
         
         tty.c_cflag &= ~PARENB;
@@ -172,6 +169,9 @@ int main() {
     try {
         RobotController controller("/dev/ttyUSB0");
         controller.printControls();
+
+        int stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+        fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK);
         
         fd_set read_fds;
         struct timeval timeout;
@@ -189,6 +189,7 @@ int main() {
             int activity = select(FD_SETSIZE, &read_fds, NULL, NULL, &timeout);
             
             if (activity < 0) {
+                if (errno == EINTR) continue; //сигнал прервал
                 perror("select error");
                 break;
             }
@@ -200,31 +201,29 @@ int main() {
             
             // Обработка команд с клавиатуры
             if (FD_ISSET(STDIN_FILENO, &read_fds)) {
-                char input_char;
-                if (read(STDIN_FILENO, &input_char, 1) > 0) {
-                    char cmd = 0;
+                char buffer[256];
+                ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
+                
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
                     
-                    switch(input_char) {
-                        case 'w': case 'W': cmd = 'W'; break;
-                        case 's': case 'S': cmd = 'S'; break;
-                        case 'a': case 'A': cmd = 'A'; break;
-                        case 'd': case 'D': cmd = 'D'; break;
-                        case 'x': case 'X': cmd = 'X'; break;
-                        case 'q': case 'Q': 
-                            cmd = 'X';
-                            controller.sendCommand(cmd);
-                            usleep(100000); // Даем время на остановку
+                    // Обрабатываем каждую команду в буфере
+                    for (int i = 0; i < bytes_read; i++) {
+                        char cmd = buffer[i];
+                        
+                        // Пропускаем переводы строк
+                        if (cmd == '\n' || cmd == '\r') continue;
+                        
+                        if (cmd == 'Q' || cmd == 'q') {
+                            controller.sendCommand('X');
                             std::cout << "\nStopping robot and exiting..." << std::endl;
+                            usleep(100000);
                             return 0;
-                        default: continue;
-                    }
-                    
-                    if (cmd != 0) {
-                        if (!controller.sendCommand(cmd)) {
-                            std::cerr << "Failed to send command to robot" << std::endl;
-                            break;
+                        } else if (strchr("WSADXwsadx", cmd)) {
+                            char upper_cmd = toupper(cmd);
+                            controller.sendCommand(upper_cmd);
+                            std::cout << "Executed command: " << upper_cmd << std::endl;
                         }
-                        std::cout << "Sent command: " << cmd << std::endl;
                     }
                 }
             }
