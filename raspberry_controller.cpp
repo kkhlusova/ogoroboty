@@ -11,6 +11,8 @@
 #include <sstream>
 #include <chrono>
 #include <algorithm>
+#include <chrono>
+#include <thread> 
 
 class RobotController {
 private:
@@ -175,6 +177,10 @@ int main() {
         
         fd_set read_fds;
         struct timeval timeout;
+
+        auto lastHeartbeat = std::chrono::steady_clock::now();
+        const auto heartbeatTimeoutMs = std::chrono::milliseconds(500);
+        const char HEARTBEAT_CMD = 'K';
         
         std::cout << "Robot controller started. Press Q to quit." << std::endl;
         
@@ -194,12 +200,10 @@ int main() {
                 break;
             }
             
-            // Проверяем данные от Arduino
             if (FD_ISSET(controller.getUartFD(), &read_fds)) {
                 controller.checkAndLogArduinoData();
             }
             
-            // Обработка команд с клавиатуры
             if (FD_ISSET(STDIN_FILENO, &read_fds)) {
                 char buffer[256];
                 ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
@@ -214,6 +218,11 @@ int main() {
                         // Пропускаем переводы строк
                         if (cmd == '\n' || cmd == '\r') continue;
                         
+                        if (cmd == HEARTBEAT_CMD) {
+                            lastHeartbeat = std::chrono::steady_clock::now();
+                            continue;
+                        }
+
                         if (cmd == 'Q' || cmd == 'q') {
                             controller.sendCommand('X');
                             std::cout << "\nStopping robot and exiting..." << std::endl;
@@ -221,11 +230,23 @@ int main() {
                             return 0;
                         } else if (strchr("WSADXwsadx", cmd)) {
                             char upper_cmd = toupper(cmd);
+                            
                             controller.sendCommand(upper_cmd);
                             std::cout << "Executed command: " << upper_cmd << std::endl;
+                            if(strchr("WSADwsad", cmd)) {
+                                lastHeartbeat = std::chrono::steady_clock::now();
+                            }
                         }
                     }
                 }
+            }
+
+            auto now = std::chrono::steady_clock::now();
+            if (now - lastHeartbeat > heartbeatTimeoutMs) {
+                std::cout << "Heartbeat timeout! Stopping robot." << std::endl;
+                controller.sendCommand('X');
+                lastHeartbeat = now;
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
     } catch (const std::exception& e) {
