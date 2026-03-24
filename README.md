@@ -14,7 +14,7 @@
     
 ### Внешний вид пульта оператора
 
-![Uploading image.png…]()
+<img width="730" height="618" alt="image" src="https://github.com/user-attachments/assets/c79ce59e-3c81-4df5-a1ce-ceb298a5c4c0" />
 
 ## 2. Основное назначение
 
@@ -166,9 +166,9 @@ r 15000
 
 ### UML-диаграммы
 
-![Uploading image.png…]()
+<img width="1048" height="1042" alt="image" src="https://github.com/user-attachments/assets/e8ddd596-0e99-44e8-88cf-c53c0e98ad87" />
 
-![Uploading image.png…]()
+<img width="1169" height="322" alt="image" src="https://github.com/user-attachments/assets/329d32fe-4a57-463c-8026-910081090820" />
 
 ## 9. Подготовка окружения
 
