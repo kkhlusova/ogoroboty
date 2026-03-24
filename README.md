@@ -14,7 +14,7 @@
     
 ### Внешний вид пульта оператора
 
-<img width="711" height="484" alt="image" src="https://github.com/user-attachments/assets/a469342f-2d35-49e7-a3e3-60c4915fa470" />
+![Uploading image.png…]()
 
 ## 2. Основное назначение
 
